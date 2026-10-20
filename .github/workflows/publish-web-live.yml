@@ -99,15 +99,19 @@ jobs:
           PY
 
       - name: Prepare GitHub Pages build
+        env:
+          # This repo's own Pages path (/<repo>/), so a fork or rename serves from the right place.
+          PAGES_BASE: /${{ github.event.repository.name }}/
         run: |
           rm -rf /tmp/movera-pages
           mkdir -p /tmp/movera-pages
           cp -a build/web/. /tmp/movera-pages/
           python3 - <<'PY'
+          import os
           from pathlib import Path
           p = Path('/tmp/movera-pages/index.html')
           s = p.read_text()
-          s = s.replace('<base href="/">', '<base href="/movera-rider-app/">')
+          s = s.replace('<base href="/">', f'<base href="{os.environ["PAGES_BASE"]}">')
           p.write_text(s)
           PY
 
@@ -126,12 +130,15 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Point compiled app assets to public CDN
+        env:
+          CDN_BASE: https://cdn.jsdelivr.net/gh/${{ github.repository }}@web-live/
         run: |
           python3 - <<'PY'
+          import os
           from pathlib import Path
           p = Path('build/web/index.html')
           s = p.read_text()
-          s = s.replace('<base href="/">', '<base href="https://cdn.jsdelivr.net/gh/baccarisverige-ux/movera-rider-app@web-live/">')
+          s = s.replace('<base href="/">', f'<base href="{os.environ["CDN_BASE"]}">')
           p.write_text(s)
           PY
 
@@ -146,8 +153,12 @@ jobs:
           # as a side effect; the built output is already copied to /tmp/movera-web
           # above, so discard those before switching branches or checkout aborts.
           git checkout -- .
-          git fetch origin web-live:web-live
-          git checkout web-live
+          # First publish on a new repo: start web-live as an empty branch.
+          if git fetch origin web-live:web-live; then
+            git checkout web-live
+          else
+            git checkout --orphan web-live
+          fi
           git rm -rf . || true
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a /tmp/movera-web/. .
